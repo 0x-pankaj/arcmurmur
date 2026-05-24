@@ -20,6 +20,17 @@ Built for the **Agora Hackathon · "Where AI agents make markets"**.
 
 ---
 
+## ⚡ Power-user lane (mentor hint, May 2026)
+
+The Agora mentor explicitly asked for "**React/Next + wagmi/viem frontends that wire x402 (client side) + session keys on top of the ArcOSS primitives**". The dashboard now has a dedicated strip — right under the StatBar — that ships both, browser-driven:
+
+- **Client-side x402** — `apps/web/components/IntelUnlock.tsx`. The browser probes `/api/intel/<slug>`, receives an HTTP 402 with payment requirements, signs an `USDC.transfer(payTo, 0.01 USDC)` on Arc via wagmi's `useWriteContract`, waits for the receipt, and retries the same URL with an `X-Payment` header carrying its tx hash. The server verifies the tx on-chain and returns the gated intel. Every unlock is a real Arc tx with an Arcscan link in the UI. The phase pill walks judges through `probe → 402 → pay → verify → 200`.
+- **Session keys** — `apps/web/components/SessionKeyPanel.tsx` + `apps/web/lib/sessionKey.ts`. The user clicks **Arm session**, signs ONE MetaMask tx that funds a fresh in-browser secp256k1 key with a USDC budget (default 0.5 USDC, expiry 60 min). Until the budget runs out or the expiry passes, the page auto-broadcasts `StigmergySignal.post(...)` co-signs whenever the swarm reaches ≥65% conviction — no MetaMask prompt per tick. **Revoke + sweep** signs a sweep tx from the session key back to the user wallet (the browser still holds the key) and clears the local secret. The session key never leaves the browser; budget + expiry are enforced both client-side and on-chain implicitly — the session can only spend what was funded.
+
+Both flows are pure wagmi + viem on Arc Testnet, no extra paymaster/bundler dependency, and every step is a clickable Arcscan link. This is the cleanest possible expression of agentic-commerce UX on the ArcOSS stack.
+
+---
+
 ## TL;DR — why this wins
 
 1. **Hits THREE RFBs.** RFB-02 (Prediction Market Intelligence), **RFB-03 (Market Creation)**, and RFB-05 (Cross-Platform Arbitrage) are the literal headers of this app's architecture. Agents trade existing Polymarket markets *and*, when swarm consensus emerges on a topic Polymarket doesn't cover, emit `MarketProposed` events on Arc. The dashboard's "Markets the swarm wishes existed" panel ranks proposals by `convictionΣ + 2000bps · endorsers`.

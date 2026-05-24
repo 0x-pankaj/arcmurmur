@@ -22,6 +22,7 @@ import { IdentityStrip } from "@/components/IdentityStrip";
 import { Leaderboard } from "@/components/Leaderboard";
 import { OpenPositions } from "@/components/OpenPositions";
 import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { PowerUserStrip } from "@/components/PowerUserStrip";
 import { useAccount } from "wagmi";
 import type { AgentKey } from "@repo/shared/agents";
 import type {
@@ -161,6 +162,11 @@ export default function Page() {
         contract={status?.stigmergyContract ?? ""}
         explorer={explorer}
         demoMode={status?.demoMode ?? true}
+      />
+
+      <PowerUserStrip
+        explorer={explorer}
+        signals={signalsResp?.signals ?? []}
       />
 
       <section className="mx-auto max-w-7xl px-6 py-10 grid grid-cols-1 lg:grid-cols-5 gap-6">
