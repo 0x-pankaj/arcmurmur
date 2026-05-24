@@ -19,6 +19,29 @@ const DecisionSchema = z.object({
   rationale: z.string().max(240),
 });
 
+/**
+ * In-memory LLM result cache. Keyed by (agentKey, marketSlug). A hit is
+ * returned when the cached entry is younger than LLM_CACHE_TTL_MS AND the
+ * Polymarket YES price has moved less than LLM_CACHE_PRICE_DELTA — meaning
+ * the market hasn't changed materially since we reasoned.
+ *
+ * Lives on globalThis so it survives Next.js hot-reloads in dev.
+ */
+type CacheEntry = {
+  ts: number;
+  yesPrice: number;
+  result: z.infer<typeof DecisionSchema> & { trace: ReasoningTrace };
+};
+const g = globalThis as unknown as { __arcmurmur_llm_cache?: Map<string, CacheEntry> };
+g.__arcmurmur_llm_cache ??= new Map();
+const llmCache = g.__arcmurmur_llm_cache!;
+
+let cacheHitCount = 0;
+let cacheMissCount = 0;
+export function llmCacheStats() {
+  return { hits: cacheHitCount, misses: cacheMissCount, size: llmCache.size };
+}
+
 export type ReasoningTrace = {
   thoughts: string[];      // step-by-step reasoning lines
   toolCalls: Array<{ tool: string; args: any; result: any }>;
@@ -55,7 +78,30 @@ export async function reasonAboutMarket(
   let convOverride: number | null = null;
   let trace: ReasoningTrace | undefined;
 
-  if (llmAvailable()) {
+  // Budget guards — skip the LLM call entirely when the agent is clearly
+  // out of its domain (heuristic prior is fine), or when we have a fresh
+  // cached decision for the same agent/market and the price hasn't moved.
+  const inDomain = persona.focus.some((f) =>
+    market.question.toLowerCase().includes(f),
+  );
+  const cacheKey = `${agent}:${market.slug}`;
+  const cached = llmCache.get(cacheKey);
+  const priceMoved =
+    cached && Math.abs(cached.yesPrice - yesPrice) > env.LLM_CACHE_PRICE_DELTA;
+  const cacheFresh =
+    cached && Date.now() - cached.ts < env.LLM_CACHE_TTL_MS && !priceMoved;
+
+  if (cacheFresh && cached) {
+    cacheHitCount++;
+    myProb = clamp01(cached.result.my_prob);
+    rationale = cached.result.rationale.slice(0, 220);
+    convOverride = clamp01(cached.result.conviction);
+    trace = cached.result.trace;
+  } else if (
+    llmAvailable() &&
+    (inDomain || !env.LLM_SKIP_OUT_OF_DOMAIN)
+  ) {
+    cacheMissCount++;
     try {
       const result = await runAgentLoop(agent, market, swarmSignals, opts.userSignals ?? []);
       if (result) {
@@ -63,6 +109,11 @@ export async function reasonAboutMarket(
         rationale = result.rationale.slice(0, 220);
         convOverride = clamp01(result.conviction);
         trace = result.trace;
+        llmCache.set(cacheKey, {
+          ts: Date.now(),
+          yesPrice,
+          result,
+        });
       }
     } catch (err) {
       console.warn(
@@ -71,6 +122,7 @@ export async function reasonAboutMarket(
       );
     }
   }
+  // else: out-of-domain + skip flag on → keep heuristic baseline, no LLM call
 
   const edge = myProb - yesPrice;
   const conv = convOverride ?? Math.min(1, Math.abs(edge) * 5);

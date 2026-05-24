@@ -39,7 +39,24 @@ export const env = {
   OPENROUTER_REASONING:
     (process.env.OPENROUTER_REASONING ?? "true").toLowerCase() !== "false",
   DEMO_MODE: (process.env.DEMO_MODE ?? "true").toLowerCase() !== "false",
-  SWARM_TICK_INTERVAL_MS: Number(process.env.SWARM_TICK_INTERVAL_MS ?? 20000),
+  SWARM_TICK_INTERVAL_MS: Number(process.env.SWARM_TICK_INTERVAL_MS ?? 60000),
+
+  // ---- LLM budget controls (kill OpenRouter cost) ----
+  // Total LLM calls per tick = markets × (1 + wildcard?) + propose?
+  // Defaults below give ~3 LLM calls per tick (was ~10).
+  LLM_MAX_MARKETS_PER_TICK: Number(process.env.LLM_MAX_MARKETS_PER_TICK ?? 3),
+  LLM_INCLUDE_WILDCARD:
+    (process.env.LLM_INCLUDE_WILDCARD ?? "false").toLowerCase() === "true",
+  LLM_SKIP_OUT_OF_DOMAIN:
+    (process.env.LLM_SKIP_OUT_OF_DOMAIN ?? "true").toLowerCase() === "true",
+  LLM_CACHE_TTL_MS: Number(process.env.LLM_CACHE_TTL_MS ?? 5 * 60 * 1000),
+  LLM_CACHE_PRICE_DELTA: Number(process.env.LLM_CACHE_PRICE_DELTA ?? 0.02),
+  LLM_MIN_CONVICTION_PROPOSAL: Number(
+    process.env.LLM_MIN_CONVICTION_PROPOSAL ?? 0.7,
+  ),
+  LLM_MAX_PROPOSALS_PER_TICK: Number(
+    process.env.LLM_MAX_PROPOSALS_PER_TICK ?? 1,
+  ),
 };
 
 export function isLive() {

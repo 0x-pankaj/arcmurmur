@@ -73,4 +73,39 @@ export type SwarmTickResult = {
   decisions: AgentDecision[];
   signalTxHashes: string[];
   notes: string[];
+  proposalTxHashes?: string[];
+};
+
+export type MarketProposalEvent = {
+  txHash: string;
+  blockNumber: number;
+  timestamp: number;
+  proposalId: string;
+  agentAddress: string;
+  agentName: string;
+  question: string;
+  category: string;
+  yesProbBps: number;
+  convictionBps: number;
+  rationale: string;
+  evidenceURI: string;
+  endorsements: Array<{
+    agentAddress: string;
+    agentName: string;
+    convictionBps: number;
+    note: string;
+    txHash: string;
+    timestamp: number;
+  }>;
+  convictionSumBps: number;
+};
+
+export type AgentIdentity = {
+  agentKey: AgentKey;
+  agentAddress: string;
+  agentId: string | null;       // ERC-8004 token id (as decimal string)
+  tokenURI: string | null;
+  registeredAt: number | null;
+  registrationTx: string | null;
+  reputationCount: number;
 };

@@ -28,12 +28,19 @@ async function main() {
   console.log(`   ✅ ${stigAddr}`);
   console.log(`   🔗 ${explorer}/address/${stigAddr}\n`);
 
-  console.log("🚀 2/2  Deploying SwarmVault…");
+  console.log("🚀 2/3  Deploying SwarmVault…");
   const vault = await (await ethers.getContractFactory("SwarmVault")).deploy(usdc, stigAddr);
   await vault.waitForDeployment();
   const vaultAddr = await vault.getAddress();
   console.log(`   ✅ ${vaultAddr}`);
   console.log(`   🔗 ${explorer}/address/${vaultAddr}\n`);
+
+  console.log("🚀 3/3  Deploying MarketProposals…");
+  const props = await (await ethers.getContractFactory("MarketProposals")).deploy();
+  await props.waitForDeployment();
+  const propsAddr = await props.getAddress();
+  console.log(`   ✅ ${propsAddr}`);
+  console.log(`   🔗 ${explorer}/address/${propsAddr}\n`);
 
   // Persist deployment info
   const outDir = path.resolve(__dirname, "../deployments");
@@ -46,6 +53,7 @@ async function main() {
         chainId: network.config.chainId,
         stigmergy: stigAddr,
         vault: vaultAddr,
+        proposals: propsAddr,
         usdc,
         deployer: deployer.address,
         deployedAt: new Date().toISOString(),
@@ -66,8 +74,9 @@ async function main() {
     };
     setVar("NEXT_PUBLIC_STIGMERGY_CONTRACT", stigAddr);
     setVar("NEXT_PUBLIC_VAULT_CONTRACT", vaultAddr);
+    setVar("NEXT_PUBLIC_PROPOSALS_CONTRACT", propsAddr);
     fs.writeFileSync(envPath, env);
-    console.log(`✏️  Updated NEXT_PUBLIC_STIGMERGY_CONTRACT + NEXT_PUBLIC_VAULT_CONTRACT in .env\n`);
+    console.log(`✏️  Updated NEXT_PUBLIC_STIGMERGY_CONTRACT + NEXT_PUBLIC_VAULT_CONTRACT + NEXT_PUBLIC_PROPOSALS_CONTRACT in .env\n`);
   }
 
   console.log("🐝 Next: pnpm dev   (open http://localhost:3000 and click 'Run swarm tick')\n");

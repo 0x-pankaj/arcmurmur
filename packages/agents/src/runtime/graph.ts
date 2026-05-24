@@ -23,6 +23,11 @@ import {
 import { buyPaidIntel } from "../tools/paidIntel";
 import { nanopayPeers } from "../tools/nanopay";
 import { reasonAboutMarket } from "../reasoning";
+import {
+  deriveProposal,
+  submitProposal,
+} from "../tools/marketProposals";
+import { env as agentEnv } from "../env";
 
 /**
  * LangGraph state machine for one swarm tick.
@@ -45,6 +50,7 @@ const SwarmState = Annotation.Root({
   priorSignals: Annotation<SignalEvent[]>({ reducer: (_, b) => b, default: () => [] }),
   decisions: Annotation<AgentDecision[]>({ reducer: (_, b) => b, default: () => [] }),
   signalTxHashes: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
+  proposalTxHashes: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
   notes: Annotation<string[]>({
     reducer: (a, b) => [...a, ...b],
     default: () => [],
@@ -67,16 +73,19 @@ async function nodeSense(s: typeof SwarmState.State) {
 }
 
 async function nodeReason(s: typeof SwarmState.State) {
-  // Reason on all markets in parallel — 3 markets × 1-2 agents = up to 6
-  // concurrent LLM calls. Stays well under OpenRouter rate limits.
+  // Reason on all markets in parallel. Wildcard agent is OPT-IN via
+  // LLM_INCLUDE_WILDCARD env (default false) — costs double the LLM
+  // calls per market. With wildcard off + LLM_SKIP_OUT_OF_DOMAIN on,
+  // a typical tick fires only 2-3 LLM calls total.
   const jobs: Promise<AgentDecision>[] = [];
   for (const market of s.markets) {
     const primary = pickAgentForMarket(market.question);
-    const pool = s.enabledAgents.filter((k) => k !== primary);
-    const wildcard = pool[Math.floor(Math.random() * pool.length)] ?? null;
-    const acting = [primary, wildcard].filter(
-      (k): k is AgentKey => !!k && s.enabledAgents.includes(k),
-    );
+    const acting: AgentKey[] = s.enabledAgents.includes(primary) ? [primary] : [];
+    if (agentEnv.LLM_INCLUDE_WILDCARD) {
+      const pool = s.enabledAgents.filter((k) => k !== primary);
+      const wildcard = pool[Math.floor(Math.random() * pool.length)] ?? null;
+      if (wildcard) acting.push(wildcard);
+    }
     for (const a of acting) {
       jobs.push(reasonAboutMarket(a, market, s.priorSignals));
     }
@@ -302,17 +311,70 @@ async function nodeWhisper(s: typeof SwarmState.State) {
   };
 }
 
+/**
+ * RFB-03: when high-conviction decisions surface but there's no satellite
+ * market on the same topic, the responsible agent emits a MarketProposed
+ * event on Arc — the swarm publicly nominates the markets it wishes
+ * existed on Polymarket. Throttled to 2 proposals per tick to avoid spam.
+ */
+async function nodePropose(s: typeof SwarmState.State) {
+  if (s.dryRun) return { notes: ["propose: skipped (dryRun)"] };
+  const MAX_PER_TICK = agentEnv.LLM_MAX_PROPOSALS_PER_TICK;
+  const MIN_CONV = agentEnv.LLM_MIN_CONVICTION_PROPOSAL;
+  const candidates = [...s.decisions]
+    .filter((d) => d.action !== "PASS" && d.conviction >= MIN_CONV)
+    .sort((a, b) => b.conviction - a.conviction)
+    .slice(0, MAX_PER_TICK);
+  if (!candidates.length) return { notes: ["propose · no high-conviction candidates"] };
+
+  const txHashes: string[] = [];
+  const notes: string[] = [];
+  for (const d of candidates) {
+    const base = s.markets.find((m) => m.slug === d.marketSlug);
+    if (!base) continue;
+    const persona = AGENT_PERSONAS[d.agent];
+    const derived = await deriveProposal(d.agent, base, d);
+    if (!derived || derived.conviction < 0.3) {
+      notes.push(`[${persona.name}] propose · no candidate worth emitting`);
+      continue;
+    }
+    const result = await submitProposal(d.agent, {
+      question: derived.question,
+      category: derived.category || base.category || "general",
+      yesProbBps: Math.round(derived.yes_prob * 10_000),
+      convictionBps: Math.round(derived.conviction * 10_000),
+      rationale: derived.rationale,
+      evidenceURI: "",
+    });
+    if (result.ok && result.txHash) {
+      txHashes.push(result.txHash);
+      notes.push(
+        `[${persona.name}] proposed "${derived.question.slice(0, 60)}…" → ${result.txHash.slice(0, 10)}…`,
+      );
+    } else if (result.ok && result.proposalId) {
+      notes.push(
+        `[${persona.name}] endorsed existing proposal · ${derived.question.slice(0, 50)}…`,
+      );
+    } else {
+      notes.push(`[${persona.name}] propose failed · ${result.error ?? "?"}`);
+    }
+  }
+  return { proposalTxHashes: txHashes, notes };
+}
+
 export const swarmGraph = (() => {
   const g = new StateGraph(SwarmState)
     .addNode("sense", nodeSense)
     .addNode("reason", nodeReason)
     .addNode("act", nodeAct)
     .addNode("whisper", nodeWhisper)
+    .addNode("propose", nodePropose)
     .addEdge(START, "sense")
     .addEdge("sense", "reason")
     .addEdge("reason", "act")
     .addEdge("act", "whisper")
-    .addEdge("whisper", END);
+    .addEdge("whisper", "propose")
+    .addEdge("propose", END);
   return g.compile();
 })();
 
@@ -320,7 +382,7 @@ export async function runSwarmGraph(
   opts: { maxMarkets?: number; dryRun?: boolean; agents?: AgentKey[] } = {},
 ): Promise<SwarmTickResult> {
   const out = await swarmGraph.invoke({
-    maxMarkets: opts.maxMarkets ?? 4,
+    maxMarkets: opts.maxMarkets ?? agentEnv.LLM_MAX_MARKETS_PER_TICK,
     dryRun: opts.dryRun ?? false,
     enabledAgents: opts.agents ?? (Object.keys(AGENT_PERSONAS) as AgentKey[]),
   });
@@ -329,6 +391,7 @@ export async function runSwarmGraph(
     marketsScanned: out.markets.length,
     decisions: out.decisions,
     signalTxHashes: out.signalTxHashes,
+    proposalTxHashes: out.proposalTxHashes,
     notes: out.notes,
   };
 }

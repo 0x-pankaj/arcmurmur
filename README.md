@@ -8,9 +8,12 @@ Built for the **Agora Hackathon · "Where AI agents make markets"**.
 
 | | |
 | --- | --- |
-| **Live deploy** | `pnpm dev` → http://localhost:3000 |
-| **StigmergySignal** (Arc Testnet) | [`0x994c…7582`](https://testnet.arcscan.app/address/0x994c90d4393a126fa7ad1D77c7587a5249237582) |
-| **SwarmVault** (Arc Testnet) | [`0xf21e…cc98`](https://testnet.arcscan.app/address/0xf21e4995278B370c4483c99367ad4A9d04f1cc98) |
+| **Live deploy** | `pnpm dev` → http://localhost:3000 · Vercel: set Root Directory to `apps/web` |
+| **StigmergySignal** (Arc Testnet) | [`0x4bAa…a64a`](https://testnet.arcscan.app/address/0x4bAac14E33a24fcc7fBde11AeBF09b91965Ea64a) |
+| **SwarmVault** (Arc Testnet) | [`0xaE41…fFCe`](https://testnet.arcscan.app/address/0xaE41D8e9624b66fF81D61Fbf9b7C2A17138EFfCe) |
+| **MarketProposals** (RFB-03, Arc Testnet) | [`0xc29c…20bf`](https://testnet.arcscan.app/address/0xc29cBFc5670929665D5c9e88fBbfdAFE997C20bf) |
+| **ERC-8004 agent IDs** | Vega #20579 · Solon #20580 · Atlas #20581 · Yuki #20582 |
+| **ERC-8004 IdentityRegistry** (Arc, pre-deployed) | [`0x8004A8…BD9e`](https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e) |
 | **CCTP v2 TokenMessenger** | [`0x8FE6…2DAA`](https://testnet.arcscan.app/address/0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA) |
 | **Native USDC on Arc (ERC-20 view, 6 dp)** | [`0x3600…0000`](https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000) |
 | **Chain ID / Explorer** | `5042002` · https://testnet.arcscan.app |
@@ -19,12 +22,13 @@ Built for the **Agora Hackathon · "Where AI agents make markets"**.
 
 ## TL;DR — why this wins
 
-1. **Built for the literal RFB.** RFB-02 (Prediction Market Intelligence) and RFB-05 (Cross-Platform Arbitrage) are *the exact thing* this project does — and we make it visible on Arc.
-2. **100% of user-visible activity is on Arc.** Deposits, copy toggle, sentiment signals, vault positions, marks, settlements, agent pheromones, x402 intel payments, agent-to-agent nanopayments — every one is an Arc tx. Open the contract on [Arcscan](https://testnet.arcscan.app/address/0xf21e4995278B370c4483c99367ad4A9d04f1cc98) and watch the events stream.
-3. **First swarm AI on Arc.** Agents coordinate purely via on-chain stigmergy events — no message bus, no Redis, no centralised orchestrator. This is genuinely novel on-chain.
-4. **Heavy native use of every Circle primitive.** Native-USDC gas, ERC-20 USDC for the vault, Circle CCTP v2 for cross-chain, x402-style HTTP 402 monetised endpoints, and per-agent nanopayments — exactly the toolkit Arc was built for.
-5. **Live AI reasoning** with DeepSeek V4 Pro (via OpenRouter), chain-of-thought captured and rendered in the dashboard's *decision trace* drawer.
-6. **Traction-first.** Vault accepts user deposits; depositors get a share of swarm PnL; sentiment signals create a co-creation loop; live Arc activity ticker creates social content. The cricket/IPL agent (Yuki) is the wedge for an enormous, underserved Indian audience.
+1. **Hits THREE RFBs.** RFB-02 (Prediction Market Intelligence), **RFB-03 (Market Creation)**, and RFB-05 (Cross-Platform Arbitrage) are the literal headers of this app's architecture. Agents trade existing Polymarket markets *and*, when swarm consensus emerges on a topic Polymarket doesn't cover, emit `MarketProposed` events on Arc. The dashboard's "Markets the swarm wishes existed" panel ranks proposals by `convictionΣ + 2000bps · endorsers`.
+2. **100% of user-visible activity is on Arc.** Deposits, copy toggle, sentiment signals, vault positions, marks, settlements, agent pheromones, x402 intel payments, agent-to-agent nanopayments, market proposals, endorsements — every one is an Arc tx. Open the contract on [Arcscan](https://testnet.arcscan.app/address/0xf21e4995278B370c4483c99367ad4A9d04f1cc98) and watch the events stream.
+3. **ERC-8004 native.** Each of the 4 agents (Vega, Solon, Atlas, Yuki) is a registered onchain identity in Arc's pre-deployed `IdentityRegistry` (`0x8004A8…BD9e`). The dashboard renders the registration strip live; peer feedback flows through the ReputationRegistry. Few hackathon submissions touch the Agentic Economy stack at all.
+4. **First swarm AI on Arc.** Agents coordinate purely via on-chain stigmergy events — no message bus, no Redis, no centralised orchestrator. This is genuinely novel on-chain.
+5. **Heavy native use of every Circle primitive.** Native-USDC gas, ERC-20 USDC for the vault, Circle CCTP v2 for cross-chain, x402-style HTTP 402 monetised endpoints, and per-agent nanopayments — exactly the toolkit Arc was built for.
+6. **Live AI reasoning** with DeepSeek V4 Pro (via OpenRouter), chain-of-thought captured and rendered in the dashboard's *decision trace* drawer.
+7. **Built for traction.** Public **depositor leaderboard** (read live from Deposit events) + **OG-image share cards** (`/api/og?wallet=…`) + boost-agent flow + cricket/IPL angle + auto-tick + onboarding banner = a platform people actually use, not a one-screen demo. The cricket/IPL agent (Yuki) is the wedge for an enormous, underserved Indian audience.
 
 If a judge takes one thing from the dashboard: **every traction tile is a link to Arcscan.** The numbers aren't tallied by us — they are read straight from the chain.
 
@@ -71,11 +75,38 @@ Two modes, switchable via `DEMO_MODE` in `.env`:
 The "Pure Testnet" path is what the Agora RFB explicitly calls out as winnable — it lets us show genuine cross-chain machinery (CCTP burn, position record, mark, settle) without risking real money.
 
 **Q. Why does this win?**
-- **RFB-02 + RFB-05 directly addressed.** Prediction Market Intelligence + Cross-Platform Arbitrage are the literal headers of this app's architecture.
-- **Every Arc primitive used heavily** — USDC gas, ERC-20 USDC vault, CCTP v2, x402 monetised endpoints, nanopayments, Arcscan deep-linking.
+- **RFB-02 + RFB-03 + RFB-05 directly addressed.** Prediction Market Intelligence + Market Creation + Cross-Platform Arbitrage are the literal headers of this app's architecture.
+- **Every Arc primitive used heavily** — USDC gas, ERC-20 USDC vault, CCTP v2, x402 monetised endpoints, nanopayments, ERC-8004 onchain agent identity + reputation, Arcscan deep-linking.
 - **100% of user-visible activity is on Arc.** Open the SwarmVault contract on Arcscan and watch the events live.
 - **Real AI reasoning** (DeepSeek V4 Pro with chain-of-thought) → visible in the decision-trace drawer.
-- **Built for traction.** Boost-agent flow + share button + cricket/IPL angle + auto-tick + onboarding banner = a platform people actually use, not a one-screen demo.
+- **Built for traction.** Depositor leaderboard + OG share cards + boost-agent flow + cricket/IPL angle + auto-tick + onboarding banner = a platform people actually use, not a one-screen demo.
+
+**Q. What's RFB-03 — "markets the swarm wishes existed"?**
+On every swarm tick, if the highest-conviction decisions surface a topic Polymarket doesn't cover, the responsible agent emits `MarketProposed(proposalId, agent, question, …)` on the new `MarketProposals` contract on Arc. Peer agents can `endorse(proposalId)` once each, weighted by their own conviction. The dashboard's *"Markets the swarm wishes existed"* panel ranks proposals — every line is a clickable Arcscan tx. Deduplication is automatic: `proposalId = keccak256(lowercase(question))`, so two agents converging on the same question coalesce into one slot with two endorsements.
+
+**Q. What's the ERC-8004 strip on the dashboard?**
+Each agent is registered onchain in Arc's pre-deployed `IdentityRegistry` (`0x8004A8…BD9e`). The strip shows token IDs, links into Arcscan, and is updated as peer feedback flows through the ReputationRegistry. Run `pnpm register:agents` once after deploying — metadata is encoded inline as a `data:` URI so there's no IPFS dependency for the demo.
+
+---
+
+## Deploying to Vercel (judge link in under 5 minutes)
+
+1. Push this repo to GitHub.
+2. On Vercel: **New Project → Import** the repo. Set **Root Directory** to `apps/web` (Vercel will auto-detect Next.js + monorepo via `apps/web/vercel.json`).
+3. In **Environment Variables**, paste every key from `.env.example` that you have a value for. The minimum set to make the dashboard load:
+   - `ARC_RPC_URL`
+   - `NEXT_PUBLIC_ARC_EXPLORER_URL=https://testnet.arcscan.app`
+   - `NEXT_PUBLIC_ARC_USDC=0x3600000000000000000000000000000000000000`
+   - `NEXT_PUBLIC_STIGMERGY_CONTRACT=<your deployed addr>`
+   - `NEXT_PUBLIC_VAULT_CONTRACT=<your deployed addr>`
+   - `NEXT_PUBLIC_PROPOSALS_CONTRACT=<your deployed addr>`
+   - `NEXT_PUBLIC_APP_URL=https://<your-vercel-domain>.vercel.app`
+   - `OPENROUTER_API_KEY` (for live reasoning) + `OPENROUTER_MODEL`
+   - `DEPLOYER_PRIVATE_KEY` + `AGENT_*_PRIVATE_KEY` (server-side, for ticking)
+4. Deploy. The first build runs `pnpm install` + `pnpm contracts:compile` + `pnpm build --filter=web...` automatically.
+5. Visit your URL — the dashboard, OG card (`/api/og`), proposals (`/api/proposals`), and identity strip (`/api/identity`) all work out of the box.
+
+> **Tip:** if `NEXT_PUBLIC_PROPOSALS_CONTRACT` is not set, the *"Markets the swarm wishes existed"* panel shows an empty state but doesn't error. Same for the ERC-8004 strip if agent wallets aren't registered yet.
 
 ---
 

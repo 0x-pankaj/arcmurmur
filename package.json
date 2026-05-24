@@ -15,7 +15,8 @@
     "keys:generate": "pnpm --filter @repo/agents keys",
     "balances": "pnpm --filter @repo/agents balances",
     "fund:agents": "pnpm --filter @repo/agents fund:agents",
-    "boost:simulate": "pnpm --filter @repo/agents boost:simulate"
+    "boost:simulate": "pnpm --filter @repo/agents boost:simulate",
+    "register:agents": "pnpm --filter @repo/agents register:agents"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

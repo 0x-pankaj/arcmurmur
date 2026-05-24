@@ -11,7 +11,9 @@ import { AGENT_PERSONAS } from "@repo/shared/agents";
 import { arcPublic } from "../tools/wallets";
 import { env } from "../env";
 
-const PER_AGENT_USDC = Number(process.env.FUND_PER_AGENT_USDC ?? "2"); // 2 USDC default
+// Default: 100 USDC per agent. Enough for a long demo without re-funding.
+// Override with FUND_PER_AGENT_USDC=<n>.
+const PER_AGENT_USDC = Number(process.env.FUND_PER_AGENT_USDC ?? "100");
 
 async function main() {
   const pk = process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined;
@@ -26,13 +28,15 @@ async function main() {
     transport: http(env.ARC_RPC_URL),
   });
 
-  const balance = await arcPublic.getBalance({ address: deployer.address });
+  let deployerBal = await arcPublic.getBalance({ address: deployer.address });
   console.log(
-    `\n👛 Deployer ${deployer.address}  balance ${(Number(balance) / 1e18).toFixed(4)} USDC\n`,
+    `\n👛 Deployer ${deployer.address}  balance ${(Number(deployerBal) / 1e18).toFixed(4)} USDC\n`,
   );
 
   // Native USDC on Arc is the gas token, 18 decimals — use parseEther.
-  const perAgent = parseEther(String(PER_AGENT_USDC));
+  const target = parseEther(String(PER_AGENT_USDC));
+  // Reserve a little for gas across N transfers.
+  const GAS_RESERVE = parseEther("0.05");
 
   for (const persona of Object.values(AGENT_PERSONAS)) {
     const agentPk = process.env[persona.envKey] as Hex | undefined;
@@ -40,25 +44,42 @@ async function main() {
       console.log(`✗ ${persona.name}: no key`);
       continue;
     }
-    const target = privateKeyToAccount(agentPk).address;
-    const before = await arcPublic.getBalance({ address: target });
-    if (before >= perAgent) {
+    const addr = privateKeyToAccount(agentPk).address;
+    const before = await arcPublic.getBalance({ address: addr });
+    if (before >= target) {
       console.log(
-        `✓ ${persona.name.padEnd(8)} ${target}  already has ${(Number(before) / 1e18).toFixed(3)} USDC, skipping`,
+        `✓ ${persona.name.padEnd(8)} ${addr}  already at ${(Number(before) / 1e18).toFixed(3)} USDC (target ${PER_AGENT_USDC}), skipping`,
       );
       continue;
     }
-    const hash = await wallet.sendTransaction({
-      to: target,
-      value: perAgent,
-    });
-    console.log(
-      `→ ${persona.name.padEnd(8)} ${target}  tx ${hash}`,
-    );
+    let needed = target - before;
+    const available =
+      deployerBal > GAS_RESERVE ? deployerBal - GAS_RESERVE : 0n;
+    if (available === 0n) {
+      console.log(
+        `⛔ ${persona.name.padEnd(8)} ${addr}  deployer empty — top up at https://faucet.circle.com (Arc Testnet)`,
+      );
+      continue;
+    }
+    if (needed > available) {
+      console.log(
+        `⚠  ${persona.name.padEnd(8)} need ${(Number(needed) / 1e18).toFixed(3)} but deployer has ${(Number(available) / 1e18).toFixed(3)} — sending partial`,
+      );
+      needed = available;
+    }
+    const hash = await wallet.sendTransaction({ to: addr, value: needed });
     await arcPublic.waitForTransactionReceipt({ hash });
+    deployerBal -= needed;
+    const after = await arcPublic.getBalance({ address: addr });
+    console.log(
+      `→ ${persona.name.padEnd(8)} ${addr}  +${(Number(needed) / 1e18).toFixed(3)} USDC → now ${(Number(after) / 1e18).toFixed(3)}  tx ${hash.slice(0, 12)}…`,
+    );
   }
 
-  console.log(`\n✅ Done. Re-check with: pnpm balances\n`);
+  console.log(
+    `\n✅ Done. Deployer balance: ${(Number(deployerBal) / 1e18).toFixed(4)} USDC.`,
+  );
+  console.log(`   Re-check with: pnpm balances\n`);
 }
 
 main().catch((e) => {

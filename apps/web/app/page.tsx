@@ -17,6 +17,13 @@ import { Footer } from "@/components/Footer";
 import { ActivityTicker } from "@/components/ActivityTicker";
 import { Onboarding } from "@/components/Onboarding";
 import { ShareCTA } from "@/components/ShareCTA";
+import { ProposedMarkets } from "@/components/ProposedMarkets";
+import { IdentityStrip } from "@/components/IdentityStrip";
+import { Leaderboard } from "@/components/Leaderboard";
+import { OpenPositions } from "@/components/OpenPositions";
+import { WelcomeBanner } from "@/components/WelcomeBanner";
+import { useAccount } from "wagmi";
+import type { AgentKey } from "@repo/shared/agents";
 import type {
   AgentStatus,
   SignalEvent,
@@ -50,6 +57,7 @@ type VaultResp = {
 };
 
 export default function Page() {
+  const { address } = useAccount();
   const [status, setStatus] = useState<Status | null>(null);
   const [signalsResp, setSignalsResp] = useState<SignalsResp | null>(null);
   const [vault, setVault] = useState<VaultResp | null>(null);
@@ -92,9 +100,12 @@ export default function Page() {
   useEffect(() => {
     if (autoTick) {
       runTick();
+      const intervalMs = Number(
+        process.env.NEXT_PUBLIC_SWARM_TICK_INTERVAL_MS ?? "60000",
+      );
       autoRef.current = setInterval(() => {
         runTick();
-      }, 30_000);
+      }, intervalMs);
       return () => {
         if (autoRef.current) clearInterval(autoRef.current);
         autoRef.current = null;
@@ -104,6 +115,14 @@ export default function Page() {
 
   const agents = status?.agents ?? [];
   const explorer = status?.arcExplorer ?? "https://testnet.arcscan.app";
+  // address → agent key map, so OpenPositions can label positions by persona
+  const agentAddressMap = useMemo(() => {
+    const map: Record<string, AgentKey> = {};
+    for (const a of agents) {
+      if (a.address) map[a.address.toLowerCase()] = a.key;
+    }
+    return map;
+  }, [agents]);
   const totalSignals = signalsResp?.signals.length ?? 0;
   const marketsScanned = status?.lastTick?.marketsScanned ?? 0;
   const activeAgent = useMemo(
@@ -119,6 +138,7 @@ export default function Page() {
     <main>
       <Header />
       <Onboarding />
+      <WelcomeBanner explorer={explorer} />
       <Hero
         onTrigger={runTick}
         ticking={ticking}
@@ -164,6 +184,23 @@ export default function Page() {
         />
       </section>
 
+      <section className="mx-auto max-w-7xl px-6 pb-10 grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3">
+          <OpenPositions
+            positions={(vault?.positions as any) ?? null}
+            explorer={explorer}
+            agentAddresses={agentAddressMap}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <Leaderboard
+            topDepositors={vault?.traction?.topDepositors ?? []}
+            explorer={explorer}
+            myAddress={address}
+          />
+        </div>
+      </section>
+
       <section className="mx-auto max-w-7xl px-6 pb-10 space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-wider text-[var(--color-fg-soft)]">
@@ -173,6 +210,7 @@ export default function Page() {
             click an agent to inspect · or hit <span className="text-[var(--color-accent)]">boost</span> to tip them on-chain
           </span>
         </div>
+        <IdentityStrip explorer={explorer} />
         <AgentCards
           agents={agents}
           explorer={explorer}
@@ -188,6 +226,7 @@ export default function Page() {
             recentTicks={signalsResp?.recentTicks ?? []}
             explorer={explorer}
           />
+          <ProposedMarkets explorer={explorer} />
           <MarketsTable />
         </div>
         <div className="lg:col-span-2 space-y-6">

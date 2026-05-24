@@ -341,3 +341,113 @@ export async function fetchYesPrice(slug: string): Promise<number | null> {
 }
 
 export const vaultAddress = () => VAULT;
+
+export type DepositorEntry = {
+  address: string;
+  totalDepositedUsdc: number;
+  totalWithdrawnUsdc: number;
+  netUsdc: number;
+  depositCount: number;
+  firstDepositAt: number;
+  lastDepositAt: number;
+  lastDepositTx: string;
+  sharesEstimate: number;
+};
+
+/**
+ * Build a depositor leaderboard from Deposit (and Withdraw, if present)
+ * events. Returns one row per user, ranked by netUsdc descending.
+ *
+ * Arc's RPC enforces a 10,000-block ceiling per `eth_getLogs` call, so we
+ * walk the window in chunks. Default span is 30k blocks (~3 chunks).
+ */
+export async function readDepositorLeaderboard(
+  maxBlocks = 30_000,
+): Promise<DepositorEntry[]> {
+  if (!vaultConfigured()) return [];
+  const CHUNK = 9_500n; // stay safely under Arc's 10k cap
+  try {
+    const latest = await arcPublic.getBlockNumber();
+    const earliest =
+      latest > BigInt(maxBlocks) ? latest - BigInt(maxBlocks) : 0n;
+    const WITHDRAW = parseAbiItem(
+      "event Withdraw(address indexed user, uint256 amount, uint128 sharesBurned)",
+    );
+
+    const depLogs: any[] = [];
+    const wdLogs: any[] = [];
+    for (let from = earliest; from <= latest; from += CHUNK + 1n) {
+      const to = from + CHUNK > latest ? latest : from + CHUNK;
+      const [d, w] = await Promise.all([
+        arcPublic
+          .getLogs({ address: VAULT, event: DEPOSIT, fromBlock: from, toBlock: to })
+          .catch(() => [] as any[]),
+        arcPublic
+          .getLogs({ address: VAULT, event: WITHDRAW, fromBlock: from, toBlock: to })
+          .catch(() => [] as any[]),
+      ]);
+      depLogs.push(...d);
+      wdLogs.push(...w);
+    }
+
+    const byUser = new Map<string, DepositorEntry>();
+    // Stitch in block timestamps cheaply: rely on event.timestamp from
+    // contract if present; otherwise fall back to block number ordering.
+    for (const log of depLogs) {
+      try {
+        const dec = decodeEventLog({
+          abi: SWARM_VAULT_ABI,
+          data: log.data,
+          topics: log.topics,
+          eventName: "Deposit",
+        });
+        const a = dec.args as any;
+        const user = String(a.user).toLowerCase();
+        const amount = Number(a.amount) / 1e6;
+        const shares = Number(a.newShares) / 1e6;
+        const entry = byUser.get(user) ?? {
+          address: user,
+          totalDepositedUsdc: 0,
+          totalWithdrawnUsdc: 0,
+          netUsdc: 0,
+          depositCount: 0,
+          firstDepositAt: 0,
+          lastDepositAt: 0,
+          lastDepositTx: "",
+          sharesEstimate: 0,
+        };
+        entry.totalDepositedUsdc += amount;
+        entry.depositCount += 1;
+        entry.lastDepositTx = log.transactionHash ?? entry.lastDepositTx;
+        const blockNum = Number(log.blockNumber ?? 0);
+        if (!entry.firstDepositAt || blockNum < entry.firstDepositAt)
+          entry.firstDepositAt = blockNum;
+        if (blockNum > entry.lastDepositAt) entry.lastDepositAt = blockNum;
+        entry.sharesEstimate = shares;
+        byUser.set(user, entry);
+      } catch {}
+    }
+    for (const log of wdLogs) {
+      try {
+        const dec = decodeEventLog({
+          abi: SWARM_VAULT_ABI,
+          data: log.data,
+          topics: log.topics,
+          eventName: "Withdraw",
+        });
+        const a = dec.args as any;
+        const user = String(a.user).toLowerCase();
+        const amount = Number(a.amount) / 1e6;
+        const entry = byUser.get(user);
+        if (entry) entry.totalWithdrawnUsdc += amount;
+      } catch {}
+    }
+    for (const e of byUser.values()) {
+      e.netUsdc = e.totalDepositedUsdc - e.totalWithdrawnUsdc;
+    }
+    return [...byUser.values()].sort((a, b) => b.netUsdc - a.netUsdc);
+  } catch (err) {
+    console.warn("[vault] readDepositorLeaderboard failed:", (err as Error).message);
+    return [];
+  }
+}

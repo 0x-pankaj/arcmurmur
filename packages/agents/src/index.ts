@@ -8,3 +8,5 @@ export * from "./tools/paidIntel";
 export * from "./tools/nanopay";
 export * from "./tools/erc20Tracker";
 export * from "./tools/wallets";
+export * from "./tools/marketProposals";
+export * from "./tools/identity";

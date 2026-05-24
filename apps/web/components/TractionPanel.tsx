@@ -9,7 +9,13 @@ export type TractionData = {
   positionCount: number;
   realizedPnl: number;
   unrealizedPnl: number;
-  topDepositors: Array<{ address: string; deposited: number }>;
+  topDepositors: Array<{
+    address: string;
+    deposited: number;
+    net?: number;
+    depositCount?: number;
+    lastDepositTx?: string;
+  }>;
   recentSignals: Array<{
     user: string;
     marketSlug: string;
@@ -25,6 +31,14 @@ export type TractionData = {
   intelPaymentTotalUsdc?: number;
   boostCount?: number;
   boostTotalUsdc?: number;
+  // Aggregate live USDC across the 4 agent wallets. "Operating capital",
+  // separate from vault TVL.
+  swarmCapital?: number;
+  // Per-agent live balances for the breakdown popup.
+  agentBalances?: Array<{ name: string; address: string; balance: number }>;
+  // Unique addresses that have done ANY on-chain action
+  // (deposit ∪ boost-sender ∪ user-signal).
+  participantCount?: number;
 };
 
 export function TractionPanel({
@@ -72,8 +86,22 @@ export function TractionPanel({
       </header>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
         <TileLink href={vaultUrl} label="TVL" value={fmtUsdc(total, 2)} sub="Deposit events · Arcscan" />
-        <TileLink href={vaultUrl} label="Users" value={String(data?.userCount ?? 0)} sub="unique depositors" />
-        <TileLink href={vaultUrl} label="User signals" value={String(data?.signalCount ?? 0)} sub="UserSignal events" />
+        <TileLink
+          href={vaultUrl}
+          label="Participants"
+          value={String(data?.participantCount ?? data?.userCount ?? 0)}
+          sub={
+            data?.userCount != null
+              ? `${data.userCount} depositors · all activity counted`
+              : "deposits + boosts + signals"
+          }
+        />
+        <TileLink
+          href={vaultUrl}
+          label="Swarm capital"
+          value={fmtUsdc(data?.swarmCapital ?? 0, 2)}
+          sub="agent treasury (operating)"
+        />
         <TileLink
           href={vaultUrl}
           label="Swarm PnL"

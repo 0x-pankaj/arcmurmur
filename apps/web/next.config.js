@@ -23,8 +23,10 @@ const nextConfig = {
     NEXT_PUBLIC_ARC_RPC_URL: process.env.ARC_RPC_URL || "https://rpc.testnet.arc.network",
     NEXT_PUBLIC_STIGMERGY_CONTRACT: process.env.NEXT_PUBLIC_STIGMERGY_CONTRACT || "",
     NEXT_PUBLIC_VAULT_CONTRACT: process.env.NEXT_PUBLIC_VAULT_CONTRACT || "",
+    NEXT_PUBLIC_PROPOSALS_CONTRACT: process.env.NEXT_PUBLIC_PROPOSALS_CONTRACT || "",
     NEXT_PUBLIC_POLYGON_USDC: process.env.NEXT_PUBLIC_POLYGON_USDC || "",
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    NEXT_PUBLIC_SWARM_TICK_INTERVAL_MS: process.env.SWARM_TICK_INTERVAL_MS || "60000",
   },
 };
 

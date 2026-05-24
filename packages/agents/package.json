@@ -16,6 +16,7 @@
     "balances": "tsx src/runtime/balances.ts",
     "fund:agents": "tsx src/runtime/fundAgents.ts",
     "boost:simulate": "tsx src/runtime/simulateBoost.ts",
+    "register:agents": "tsx src/runtime/registerAgents.ts",
     "lint": "echo 'agents: no lint'",
     "check-types": "tsc --noEmit"
   },

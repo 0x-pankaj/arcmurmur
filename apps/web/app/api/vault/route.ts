@@ -4,7 +4,13 @@ import {
   readVaultStats,
   readSwarmSignals,
   scanErc20Activity,
+  readDepositorLeaderboard,
+  arcPublic,
+  agentAddress,
 } from "@repo/agents";
+import { AGENT_KEYS, AGENT_PERSONAS } from "@repo/shared/agents";
+import { ARC_ADDRS } from "@repo/shared/chains";
+import { ERC20_ABI } from "@repo/shared/abi";
 import type { TractionData } from "@/components/TractionPanel";
 
 export const runtime = "nodejs";
@@ -17,17 +23,47 @@ const bigintSafe = (_k: string, v: any) =>
   typeof v === "bigint" ? v.toString() : v;
 
 export async function GET() {
-  const [stats, events, agentSignals, erc20] = await Promise.all([
-    readVaultStats(),
-    readRecentVaultEvents(),
-    readSwarmSignals(),
-    scanErc20Activity(),
-  ]);
+  const [stats, events, agentSignals, erc20, leaderboard, agentBalances] =
+    await Promise.all([
+      readVaultStats(),
+      readRecentVaultEvents(),
+      readSwarmSignals(),
+      scanErc20Activity(),
+      readDepositorLeaderboard(),
+      // Per-agent live USDC balances → "Swarm capital".
+      Promise.all(
+        AGENT_KEYS.map(async (k) => {
+          try {
+            const bal = (await arcPublic.readContract({
+              address: ARC_ADDRS.usdc as `0x${string}`,
+              abi: ERC20_ABI,
+              functionName: "balanceOf",
+              args: [agentAddress(k)],
+            })) as bigint;
+            return {
+              name: AGENT_PERSONAS[k].name,
+              address: agentAddress(k),
+              balance: Number(bal) / 1e6,
+            };
+          } catch {
+            return {
+              name: AGENT_PERSONAS[k].name,
+              address: agentAddress(k),
+              balance: 0,
+            };
+          }
+        }),
+      ),
+    ]);
 
-  // Top depositors derived from the rich Deposit event payload (not just the
-  // unique-set), so dollar amounts show up.
-  const depositTotals = new Map<string, number>();
-  for (const addr of events.depositors) depositTotals.set(addr, 0);
+  // "Participants" = anyone who has interacted at all (deposit / boost / signal).
+  const participants = new Set<string>();
+  for (const d of events.depositors) participants.add(d.toLowerCase());
+  for (const b of erc20.boostsReceived)
+    participants.add((b.from ?? "").toLowerCase());
+  for (const s of events.userSignals) participants.add(s.user.toLowerCase());
+  participants.delete(""); // guard
+  const swarmCapital = agentBalances.reduce((s, a) => s + a.balance, 0);
 
   const traction: TractionData = {
     totalDeposits: stats ? Number(stats.totalDeposits) / 1e6 : 0,
@@ -36,12 +72,14 @@ export async function GET() {
     positionCount: stats?.positionCount ?? events.positions.length,
     realizedPnl: stats ? Number(stats.realizedMicroUsdc) / 1e6 : 0,
     unrealizedPnl: stats ? Number(stats.unrealizedMicroUsdc) / 1e6 : 0,
-    topDepositors: [...events.depositors].map((a) => ({
-      address: a,
-      deposited: depositTotals.get(a) ?? 0,
+    topDepositors: leaderboard.slice(0, 10).map((d) => ({
+      address: d.address,
+      deposited: d.totalDepositedUsdc,
+      net: d.netUsdc,
+      depositCount: d.depositCount,
+      lastDepositTx: d.lastDepositTx,
     })),
     recentSignals: events.userSignals.slice(0, 20),
-    // 🆕 the three previously-placeholder tiles
     agentSignalCount: agentSignals.length,
     nanopayCount: erc20.nanopayments.length,
     nanopayTotalUsdc:
@@ -59,6 +97,9 @@ export async function GET() {
       (s, m) => s + Number(m.amountMicro) / 1e6,
       0,
     ),
+    swarmCapital,
+    agentBalances,
+    participantCount: participants.size,
   };
 
   // Sanitise positions (BigInt id) so the wire-format is safe.
@@ -67,9 +108,8 @@ export async function GET() {
     id: p.id.toString(),
   }));
 
-  // Use the bigint-safe replacer in case anything else leaks through.
   return new NextResponse(
-    JSON.stringify({ traction, positions }, bigintSafe),
+    JSON.stringify({ traction, positions, leaderboard }, bigintSafe),
     { headers: { "content-type": "application/json" } },
   );
 }
