@@ -1,0 +1,24 @@
+{
+  "name": "@repo/contracts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:arc": "hardhat run scripts/deploy.ts --network arc",
+    "node": "hardhat node",
+    "lint": "echo 'contracts: no lint'",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.1.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.22.17"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "5.9.2"
+  }
+}

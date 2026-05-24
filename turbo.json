@@ -1,11 +1,41 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalDependencies": [".env"],
+  "globalEnv": [
+    "ARC_RPC_URL",
+    "ARC_CHAIN_ID",
+    "ARC_EXPLORER_URL",
+    "POLYGON_RPC_URL",
+    "POLYGON_CHAIN_ID",
+    "NEXT_PUBLIC_STIGMERGY_CONTRACT",
+    "NEXT_PUBLIC_ARC_USDC",
+    "NEXT_PUBLIC_POLYGON_USDC",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_ARC_EXPLORER_URL",
+    "POLYMARKET_BUILDER_ADDRESS",
+    "POLYMARKET_BUILDER_CODE",
+    "POLYMARKET_API_KEY",
+    "POLYMARKET_API_SECRET",
+    "POLYMARKET_API_PASSPHRASE",
+    "POLYMARKET_CLOB_HOST",
+    "POLYMARKET_GAMMA_HOST",
+    "DEPLOYER_PRIVATE_KEY",
+    "AGENT_CRYPTO_PRIVATE_KEY",
+    "AGENT_POLITICS_PRIVATE_KEY",
+    "AGENT_MACRO_PRIVATE_KEY",
+    "AGENT_SPORTS_PRIVATE_KEY",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_MODEL",
+    "OPENROUTER_BASE_URL",
+    "DEMO_MODE",
+    "SWARM_TICK_INTERVAL_MS"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {
       "dependsOn": ["^lint"]
@@ -14,6 +44,17 @@
       "dependsOn": ["^check-types"]
     },
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "deploy:arc": {
+      "cache": false
+    },
+    "tick": {
+      "cache": false,
+      "persistent": false
+    },
+    "loop": {
       "cache": false,
       "persistent": true
     }

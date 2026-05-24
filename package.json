@@ -1,12 +1,21 @@
 {
   "name": "arcmurmur",
   "private": true,
+  "description": "ArcMurmur — a stigmergic swarm of AI agents trading Polymarket via Arc + Circle CCTP",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "format": "prettier --write \"**/*.{ts,tsx,md,sol}\"",
+    "check-types": "turbo run check-types",
+    "contracts:compile": "pnpm --filter @repo/contracts compile",
+    "contracts:deploy": "pnpm --filter @repo/contracts deploy:arc",
+    "swarm:tick": "pnpm --filter @repo/agents tick",
+    "swarm:loop": "pnpm --filter @repo/agents loop",
+    "keys:generate": "pnpm --filter @repo/agents keys",
+    "balances": "pnpm --filter @repo/agents balances",
+    "fund:agents": "pnpm --filter @repo/agents fund:agents",
+    "boost:simulate": "pnpm --filter @repo/agents boost:simulate"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
