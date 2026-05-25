@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# arc-kit / ArcMurmur secret guard.
+# Blocks a commit if a tracked *.example env file has a non-placeholder value
+# for a known-secret key, or if an obvious live token is staged anywhere.
+# The whole point of *.example files is placeholders.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+#
+set -uo pipefail
+
+red() { printf '\033[31m%s\033[0m\n' "$1"; }
+violations=0
+
+scan_example() {  # $1 = staged file content; prints offending lines
+  awk '
+    /^(POLYMARKET_API_KEY|POLYMARKET_API_SECRET|POLYMARKET_API_PASSPHRASE|POLYMARKET_BUILDER_CODE|OPENROUTER_API_KEY|DEPLOYER_PRIVATE_KEY|PRIVATE_KEY)=/ \
+      || /^AGENT_[A-Z]+_PRIVATE_KEY=/ {
+        eq = index($0, "="); val = substr($0, eq + 1);
+        if (val == "") next;                  # empty placeholder, ok
+        low = tolower(val);
+        if (low ~ /replace-me|your-/) next;   # word placeholders, ok
+        if (val ~ /^<.*>$/) next;             # <angle> placeholder, ok
+        if (val ~ /^0x0+$/) next;             # all-zero address, ok
+        if (val ~ /^\$\{/) next;              # ${VAR} expansion, ok
+        print "    " $0;
+      }'
+}
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  offending="$(git show ":$f" 2>/dev/null | scan_example)"
+  if [ -n "$offending" ]; then
+    red "✖ $f has filled-in secret values — *.example must use placeholders:"
+    printf '%s\n' "$offending"
+    violations=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM | grep -E '\.env.*\.example$' || true)
+
+# Defence in depth: obvious live tokens staged anywhere.
+leak="$(git diff --cached -U0 --diff-filter=ACM | grep -E '^\+' \
+        | grep -oE 'sk-or-v1-[A-Za-z0-9]{20,}|swrm_[a-f0-9]{32,}' \
+        | grep -vE 'replace-me' || true)"
+if [ -n "$leak" ]; then
+  red "✖ A live-looking API token is staged:"
+  printf '%s\n' "$leak" | sed 's/^/    /'
+  violations=1
+fi
+
+if [ "$violations" -ne 0 ]; then
+  red "Commit blocked. Move real secrets to your gitignored .env."
+  echo  "Bypass (not recommended): git commit --no-verify"
+  exit 1
+fi
+exit 0
