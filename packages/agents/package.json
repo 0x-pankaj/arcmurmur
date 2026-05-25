@@ -14,6 +14,7 @@
     "loop": "tsx src/runtime/runLoop.ts",
     "keys": "tsx src/runtime/generateKeys.ts",
     "balances": "tsx src/runtime/balances.ts",
+    "traction": "tsx src/runtime/traction.ts",
     "fund:agents": "tsx src/runtime/fundAgents.ts",
     "boost:simulate": "tsx src/runtime/simulateBoost.ts",
     "register:agents": "tsx src/runtime/registerAgents.ts",
