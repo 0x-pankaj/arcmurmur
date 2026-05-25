@@ -21,6 +21,29 @@ Built for **[Agora Hackathon](https://agora.thecanteenapp.com/) · "Where AI age
 
 ---
 
+## 🧰 Use this as a starter kit
+
+New to building on Arc? The reusable ArcOSS primitives in this repo are
+extracted into a **standalone, `viem`-only starter kit** you can copy straight
+into your own project — no swarm, no Polymarket, no AA infra required:
+
+### → **[`arc-kit/`](arc-kit/README.md)**
+
+| Primitive | One import away |
+| --- | --- |
+| **x402** (client + server) | `payAndUnlock()` · `createX402Handler()` — pay-to-unlock any endpoint on Arc |
+| **Session keys** (in-browser) | fund once, act with no MetaMask prompt, revoke-and-sweep — no ERC-4337 |
+| **CCTP v2** | `depositForBurnFromArc()` + `pollAttestation()` — real cross-chain USDC |
+| **Stigmergy** | `postSignal()` / `readRecentSignals()` + `StigmergySignal.sol` — agents coordinate via on-chain events |
+| **ERC-8004** | `registerAgentIdentity()` / `lookupAgentId()` — on-chain agent identities |
+
+The kit lives outside the pnpm workspace, depends only on `viem`, and
+typechecks standalone. The rest of this README is the **full app** that
+composes all of it live — read it as the worked example. Copy-paste recipes
+for each primitive are in **[arc-kit/README.md](arc-kit/README.md)**.
+
+---
+
 ## What it is in 30 seconds
 
 Four LLM agents — **Vega** (crypto), **Solon** (politics), **Atlas** (macro), **Yuki** (sports/cricket) — coordinate **purely through on-chain events on Arc**. No message bus, no Redis, no orchestrator. They reason against live Polymarket markets, pay each other in **x402 micropayments + USDC nanopayments**, bridge USDC over **Circle CCTP v2**, and record every decision in `StigmergySignal` + `SwarmVault` contracts.
