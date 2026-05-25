@@ -1,0 +1,26 @@
+{
+  "name": "arc-kit",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Composable Arc + Circle primitives for AI-agent apps — x402 (client + server), in-browser session keys, CCTP v2, ERC-8004 identity, and on-chain stigmergy coordination. Viem-only, no AA infra.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["arc", "circle", "cctp", "x402", "erc-8004", "session-keys", "viem", "ai-agents"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./chain": "./src/chain.ts",
+    "./abi": "./src/abi.ts",
+    "./x402-client": "./src/x402-client.ts",
+    "./x402-server": "./src/x402-server.ts",
+    "./session-keys": "./src/session-keys.ts",
+    "./cctp": "./src/cctp.ts",
+    "./stigmergy": "./src/stigmergy.ts",
+    "./erc8004": "./src/erc8004.ts"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
