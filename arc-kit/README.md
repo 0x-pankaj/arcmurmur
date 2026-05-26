@@ -26,6 +26,12 @@ The `circlefin/arc-*` reference repos give you the *engine parts* — a CCTP bur
 
 Extracted from **[ArcMurmur](../README.md)** (Agora hackathon, "Where AI agents make markets"), where all of this runs live.
 
+> **Dogfooded.** The ArcMurmur app imports this kit directly — it's the source
+> of truth, not a parallel copy:
+> - `packages/agents/src/tools/paidIntel.ts` → `arc-kit/x402-client`
+> - `apps/web/app/api/intel/[slug]/route.ts` → `arc-kit/x402-server`
+> - `apps/web/lib/sessionKey.ts` → `arc-kit/session-keys`
+
 ---
 
 ## Install
