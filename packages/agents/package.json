@@ -26,6 +26,7 @@
     "@langchain/core": "^0.3.30",
     "@langchain/langgraph": "^0.2.34",
     "@repo/shared": "workspace:*",
+    "arc-kit": "workspace:*",
     "ai": "^4.0.30",
     "dotenv": "^16.4.7",
     "viem": "^2.21.55",

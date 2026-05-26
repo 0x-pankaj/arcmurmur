@@ -12,7 +12,7 @@ loadEnv({ path: resolve(__dirname, "../../.env") });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@repo/ui", "@repo/shared", "@repo/agents"],
+  transpilePackages: ["@repo/ui", "@repo/shared", "@repo/agents", "arc-kit"],
   experimental: {},
   typescript: { ignoreBuildErrors: false },
   // Pin the env vars Next.js inlines so it doesn't matter whether the dev

@@ -3,141 +3,68 @@
 /**
  * Session-key infrastructure for ArcMurmur power users.
  *
- * Why this exists — mentor hint (Agora hackathon):
- *   "would love to see more frontend repos — React/Next + wagmi/viem that wire
- *    x402 (client side) + session keys on top of the ArcOSS primitives"
+ * The crypto + on-chain mechanics (key generation, signing txs from the
+ * session key with no MetaMask prompt, sweeping USDC back on revoke) come
+ * straight from the standalone **`arc-kit`** primitive — this file only adds
+ * ArcMurmur-specific glue: the storage namespace and the StigmergySignal
+ * co-sign. Same kit, dogfooded by the live app.
  *
  * What a "session key" means here:
- *   - The browser generates a fresh secp256k1 EOA on demand.
- *   - The user funds the session key with a small USDC budget via ONE MetaMask
- *     transfer (e.g. 0.5 USDC).
- *   - Until the budget runs out or the expiry passes, the page can send
- *     transactions on Arc from that session key without prompting MetaMask.
- *   - Concrete demo use: auto-broadcast `StigmergySignal.post(...)` co-signs
- *     when the swarm reaches high conviction, so the user "rides the swarm"
- *     without signing every tick.
- *   - Revoke = sweep remaining USDC back to the user wallet (signed by the
- *     session key, which the browser holds).
- *
- * This is not ERC-4337. It's the simplest credible session-key UX that still
- * produces real on-chain txs on Arc Testnet, which is what judges can verify.
- * It also avoids adding a paymaster/bundler dependency for the hackathon.
+ *   - The browser generates a fresh secp256k1 EOA.
+ *   - The user funds it with a small USDC budget via ONE MetaMask transfer.
+ *   - Until the budget runs out or the expiry passes, the page posts
+ *     StigmergySignal co-signs from that key without prompting MetaMask.
+ *   - Revoke = sweep remaining USDC back to the user wallet.
  */
 
+import { encodeFunctionData, type Address, type Hex } from "viem";
 import {
-  createPublicClient,
-  createWalletClient,
-  encodeFunctionData,
-  http,
-  type Address,
-  type Hex,
-  type WalletClient,
-} from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { arcTestnet, ARC_ADDRS } from "@repo/shared/chains";
-import { ERC20_ABI, STIGMERGY_ABI } from "@repo/shared/abi";
+  generateSessionKey,
+  isSessionLive,
+  remainingBudgetMicro,
+  sessionSend,
+  sessionSweepUSDC,
+  type SessionRecord,
+} from "arc-kit/session-keys";
+import { STIGMERGY_ABI } from "@repo/shared/abi";
 import { STIGMERGY_ADDRESS } from "@/lib/wagmi";
 
-export type SessionRecord = {
-  /** Owner wallet (the user's MetaMask address) — scopes the storage slot. */
-  owner: Address;
-  /** Session key private key (lives only in this browser, in localStorage). */
-  privateKey: Hex;
-  /** Derived session-key address — visible on-chain as msg.sender. */
-  address: Address;
-  /** Wall-clock ms when the session expires. */
-  expiresAt: number;
-  /** USDC budget (6 decimals, micro) authorized for this session. */
-  budgetMicro: string;
-  /** USDC spent so far (best-effort, client-tracked). */
-  spentMicro: string;
-  /** Tx hash of the funding transfer that armed the session. */
-  fundingTxHash?: Hex;
-  /** Count of auto-broadcast actions this session has performed. */
-  autoActions: number;
+// Re-export the kit primitives the UI consumes, so component imports are
+// unchanged (`@/lib/sessionKey` stays the single import surface).
+export {
+  generateSessionKey,
+  isSessionLive,
+  remainingBudgetMicro,
+  sessionSweepUSDC,
+  type SessionRecord,
 };
 
+// --- ArcMurmur-specific storage (own namespace, preserves existing sessions) ---
+
 const KEY_PREFIX = "arcmurmur::session::";
-function storageKey(owner: Address) {
-  return KEY_PREFIX + owner.toLowerCase();
-}
+const storageKey = (owner: Address) => KEY_PREFIX + owner.toLowerCase();
 
 export function loadSession(owner?: Address | null): SessionRecord | null {
   if (!owner || typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(storageKey(owner));
-    if (!raw) return null;
-    return JSON.parse(raw) as SessionRecord;
+    return raw ? (JSON.parse(raw) as SessionRecord) : null;
   } catch {
     return null;
   }
 }
 
 export function saveSession(rec: SessionRecord) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(storageKey(rec.owner), JSON.stringify(rec));
+  if (typeof window !== "undefined")
+    window.localStorage.setItem(storageKey(rec.owner), JSON.stringify(rec));
 }
 
 export function clearSession(owner: Address) {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(storageKey(owner));
+  if (typeof window !== "undefined") window.localStorage.removeItem(storageKey(owner));
 }
 
-/** Fresh session key — keep until the owner funds and saves it. */
-export function generateSessionKey(): { privateKey: Hex; address: Address } {
-  const pk = generatePrivateKey();
-  const acc = privateKeyToAccount(pk);
-  return { privateKey: pk, address: acc.address };
-}
+// --- ArcMurmur-specific action: post a StigmergySignal from the session key ---
 
-/** Read-only client for confirmations + balance reads. */
-const arcRpc =
-  (typeof process !== "undefined" &&
-    (process.env.NEXT_PUBLIC_ARC_RPC_URL as string | undefined)) ||
-  "https://rpc.testnet.arc.network";
-
-export const arcPublic = createPublicClient({
-  chain: arcTestnet,
-  transport: http(arcRpc),
-});
-
-/** Wallet client driven by the session privkey (no MetaMask prompt). */
-export function sessionWalletClient(privateKey: Hex): WalletClient {
-  const account = privateKeyToAccount(privateKey);
-  return createWalletClient({
-    account,
-    chain: arcTestnet,
-    transport: http(arcRpc),
-  });
-}
-
-export function isSessionLive(rec: SessionRecord | null): boolean {
-  if (!rec) return false;
-  if (Date.now() > rec.expiresAt) return false;
-  try {
-    return BigInt(rec.spentMicro) < BigInt(rec.budgetMicro);
-  } catch {
-    return false;
-  }
-}
-
-export function remainingBudgetMicro(rec: SessionRecord): bigint {
-  try {
-    const b = BigInt(rec.budgetMicro);
-    const s = BigInt(rec.spentMicro);
-    return b > s ? b - s : 0n;
-  } catch {
-    return 0n;
-  }
-}
-
-/**
- * Post a StigmergySignal from the session key. The session key acts as a new
- * "agent" address on-chain. The Stigmergy contract treats every msg.sender as
- * its own agent identity, so user co-signs show up naturally in the feed.
- *
- * Returns a tx hash on success.
- */
 export async function sessionPostSignal(
   rec: SessionRecord,
   args: {
@@ -157,15 +84,8 @@ export async function sessionPostSignal(
   ) {
     throw new Error("STIGMERGY contract not configured");
   }
-  const account = privateKeyToAccount(rec.privateKey);
-  const wallet = createWalletClient({
-    account,
-    chain: arcTestnet,
-    transport: http(arcRpc),
-  });
-  const hash = await wallet.writeContract({
+  const data = encodeFunctionData({
     abi: STIGMERGY_ABI,
-    address: STIGMERGY_ADDRESS,
     functionName: "post",
     args: [
       args.marketId,
@@ -178,38 +98,9 @@ export async function sessionPostSignal(
       args.rationale,
       `0x${"0".repeat(64)}` as Hex,
     ],
-    account,
-    chain: arcTestnet,
   });
-  return hash;
-}
-
-/** Sweep remaining USDC from session key back to owner — used on Revoke. */
-export async function sessionSweepUSDC(rec: SessionRecord): Promise<Hex | null> {
-  const account = privateKeyToAccount(rec.privateKey);
-  const balance = (await arcPublic.readContract({
-    abi: ERC20_ABI,
-    address: ARC_ADDRS.usdc as Address,
-    functionName: "balanceOf",
-    args: [account.address],
-  })) as bigint;
-  if (balance === 0n) return null;
-  const wallet = createWalletClient({
-    account,
-    chain: arcTestnet,
-    transport: http(arcRpc),
-  });
-  const hash = await wallet.sendTransaction({
-    to: ARC_ADDRS.usdc as Address,
-    data: encodeFunctionData({
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [rec.owner, balance],
-    }),
-    chain: arcTestnet,
-    account,
-  });
-  return hash;
+  // The kit drives the session wallet (no MetaMask prompt).
+  return sessionSend(rec, STIGMERGY_ADDRESS as Address, data);
 }
 
 export function formatTimeRemaining(ms: number): string {

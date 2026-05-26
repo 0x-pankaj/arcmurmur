@@ -17,8 +17,15 @@
     "./stigmergy": "./src/stigmergy.ts",
     "./erc8004": "./src/erc8004.ts"
   },
-  "peerDependencies": {
-    "viem": "^2.0.0"
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.21.55"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "5.9.2"
   },
   "engines": {
     "node": ">=18"
